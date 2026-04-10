@@ -12,7 +12,14 @@ spark.sparkContext.setLogLevel("WARN")
 
 
 df = spark.read.csv("Matches.csv", header=True, inferSchema=True)
+train_df, test_df = df.randomSplit([0.8, 0.2], seed=42)
 
+test_df.toPandas().to_csv("Matches_test.csv", index=False)
+
+df = train_df
+
+total_rows = df.count()
+print(total_rows, "rows in train Matches.csv")
 
 total_rows = df.count()
 print(total_rows, "rows in original Matches.csv" )

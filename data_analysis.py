@@ -1,7 +1,7 @@
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType, StringType
-from pyspark.sql.functions import col, when, count, isnan, isnull, mean, median
+from pyspark.sql.functions import col, when, count, isnan, isnull, mean, median,lit
 import matplotlib.pyplot as plt
 from scipy import stats
 import seaborn as sns
@@ -42,7 +42,7 @@ home_g = df.groupBy("HomeTeam").agg(F.sum("HTHome").alias("home_goals"))
 away_g = df.groupBy("AwayTeam").agg(F.sum("HTAway").alias("away_goals")) \
            .withColumnRenamed("AwayTeam", "HomeTeam")
 ha_df = home_g.join(away_g, "HomeTeam") \
-              .orderBy(col("away_goals").desc()) \
+              .orderBy(col("home_goals").desc()) \
               .limit(15) \
               .toPandas()
 teams = ha_df["HomeTeam"]
@@ -509,3 +509,215 @@ plt.show()
 # ─────────────────────────────────────────────────────────────────────────────
 # SECTION 5 – HALF-TIME vs FULL-TIME PATTERNS
 # ─────────────────────────────────────────────────────────────────────────────
+print("\n" + "="*60)
+print("SECTION 5 – HALF-TIME vs FULL-TIME PATTERNS")
+print("="*60)
+
+# Q17 – Half-time result to full-time result transition matrix
+
+ht_ft = df.filter(col("HTResult").isin(["H","D","A"])) \
+          .groupBy("HTResult","FTResult") \
+          .agg(count("*").alias("count")) \
+          .toPandas()
+pivot = ht_ft.pivot(index="HTResult", columns="FTResult", values="count").fillna(0)
+pivot_pct = pivot.div(pivot.sum(axis=1), axis=0) * 100
+print(" HT→FT Transition Matrix (%)")
+print(pivot_pct.round(1).to_string())
+plt.figure(figsize=(8,5))
+im = plt.imshow(pivot_pct.values, cmap="RdYlGn", aspect="auto", vmin=0, vmax=100)
+plt.xticks(range(len(pivot_pct.columns)), pivot_pct.columns)
+plt.yticks(range(len(pivot_pct.index)), pivot_pct.index)
+
+plt.xlabel("Full-Time Result")
+plt.ylabel("Half-Time Result")
+plt.title("Half-Time → Full-Time Result Transition (%)")
+
+for i in range(len(pivot_pct.index)):
+    for j in range(len(pivot_pct.columns)):
+        plt.text(j, i, f"{pivot_pct.values[i,j]:.0f}%", ha="center", va="center", color="black")
+
+plt.colorbar(im, label="% of matches")
+
+plt.tight_layout()
+plt.show()
+
+# Q18 – Teams that come back most from HT deficit (HT losing, FT win)
+home_cb = df.filter((col("HTResult") == "A") & (col("FTResult") == "H")).groupBy("HomeTeam") .agg(count("*").alias("comebacks"))
+away_cb = df.filter((col("HTResult") == "H") & (col("FTResult") == "A")).groupBy("AwayTeam").agg(count("*").alias("comebacks")).withColumnRenamed("AwayTeam", "HomeTeam")
+comebacks = home_cb.unionByName(away_cb).groupBy("HomeTeam").agg(F.sum("comebacks").alias("comebacks")).orderBy(F.col("comebacks").desc()).limit(10).toPandas()
+plt.figure(figsize=(12,6))
+colors = sns.light_palette("coral", n_colors=len(comebacks), reverse=True)
+plt.bar(comebacks["HomeTeam"], comebacks["comebacks"], color=colors)
+plt.title("Top 10 Teams with Most Comebacks (HT Loss → FT Win)")
+plt.xlabel("Team")
+plt.ylabel("Number of Comebacks")
+plt.xticks(rotation=45, ha='right')
+for i, v in enumerate(comebacks["comebacks"]):
+    plt.text(i, v + 0.1, str(v), ha='center')
+plt.tight_layout()
+plt.show()
+
+# Q19 - Teams that blow leads most from HT lead (HT win, FT loss)
+home_cb = df.filter((col("HTResult") == "H") & (col("FTResult") == "A")).groupBy("HomeTeam") .agg(count("*").alias("comebacks"))
+away_cb = df.filter((col("HTResult") == "A") & (col("FTResult") == "H")).groupBy("AwayTeam").agg(count("*").alias("comebacks")).withColumnRenamed("AwayTeam", "HomeTeam")
+comebacks = home_cb.unionByName(away_cb).groupBy("HomeTeam").agg(F.sum("comebacks").alias("comebacks")).orderBy(F.col("comebacks").desc()).limit(10).toPandas()
+plt.figure(figsize=(12,6))
+colors = sns.light_palette("coral", n_colors=len(comebacks), reverse=True)
+plt.bar(comebacks["HomeTeam"], comebacks["comebacks"], color=colors)
+plt.title("Top 10 Teams with Most Blown Leads (HT Win → FT Loss)")
+plt.xlabel("Team")
+plt.ylabel("Number of Blown Leads")
+plt.xticks(rotation=45, ha='right')
+for i, v in enumerate(comebacks["comebacks"]):
+    plt.text(i, v + 0.1, str(v), ha='center')
+plt.tight_layout()
+plt.show()
+
+# Q20 – Average FT goals when team is winning vs losing at HT
+
+ht_goals = df.filter(col("HTResult").isin(["H","D","A"])) \
+    .groupBy("HTResult").agg(
+        mean(col("FTHome")+col("FTAway")).alias("avg_ft_goals"),
+        mean(col("FTHome")).alias("avg_ft_home"),
+        mean(col("FTAway")).alias("avg_ft_away"),
+        count("*").alias("matches")
+    ).orderBy("HTResult").toPandas()
+print("FT Goals by HT Result")
+print(ht_goals.to_string(index=False))
+x = np.arange(len(ht_goals))
+w = 0.25
+plt.figure(figsize=(10,6))
+plt.bar(x - w, ht_goals["avg_ft_goals"], w, label="Total Goals")
+plt.bar(x,     ht_goals["avg_ft_home"],  w, label="Home Goals")
+plt.bar(x + w, ht_goals["avg_ft_away"],  w, label="Away Goals")
+plt.xticks(x, ht_goals["HTResult"])
+plt.xlabel("Half-Time Result")
+plt.ylabel("Average Goals")
+plt.title("Average Full-Time Goals by Half-Time Result")
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 6 – BETTING ODDS ANALYSIS
+# ─────────────────────────────────────────────────────────────────────────────
+print("\n" + "="*60)
+print("SECTION 6 – BETTING ODDS ANALYSIS")
+print("="*60)
+
+# Q21 – Value betting: how often does the underdog (higher odds) win?
+underdog_home = df.filter(col("OddHome") > col("OddAway"))
+underdog_home_wins = underdog_home.filter(col("FTResult") == "H").count()
+underdog_home_total = underdog_home.count()
+
+print(f"Underdog (home) win rate: {underdog_home_wins / underdog_home_total * 100:.1f}% "
+      f"({underdog_home_wins:,}/{underdog_home_total:,})")
+
+# Q22 – Accuracy of bookmaker favorites (lowest odds) in predicting match winners
+
+predicted_home = df.filter((col("OddHome") < col("OddAway")) & (col("FTResult") == "H")).count()
+predicted_away = df.filter((col("OddAway") < col("OddHome")) & (col("FTResult") == "A")).count()
+predicted_total = predicted_home + predicted_away
+total_matches = df.count()
+print(f"Favorite win accuracy: {predicted_total / total_matches * 100:.1f}% "
+      f"({predicted_total:,}/{total_matches:,})")
+
+# Q23 – Does having both Form AND Elo advantage guarantee a win?
+combined_df = df.withColumn("EloDiff", col("HomeElo") - col("AwayElo")) \
+    .withColumn("FormDiff", col("Form3Home") - col("Form3Away")) \
+    .withColumn("AdvantageType",
+        when((col("EloDiff") > 0) & (col("FormDiff") > 0), "Both")
+        .when((col("EloDiff") > 0) & (col("FormDiff") <= 0), "Elo Only")
+        .when((col("EloDiff") <= 0) & (col("FormDiff") > 0), "Form Only")
+        .otherwise("None")
+    )
+advantage_stats = combined_df.groupBy("AdvantageType").agg(
+    count("*").alias("total"),
+    (count(when(col("FTResult") == "H", 1)) / count("*") * 100).alias("home_win_pct"),
+    (count(when(col("FTResult") == "D", 1)) / count("*") * 100).alias("draw_pct"),
+    (count(when(col("FTResult") == "A", 1)) / count("*") * 100).alias("away_win_pct")
+).toPandas()
+order = ["Both", "Elo Only", "Form Only", "None"]
+advantage_stats = advantage_stats.set_index("AdvantageType").reindex(order).reset_index()
+
+print("Combined Elo + Form Advantage vs Outcomes")
+print(advantage_stats.to_string(index=False))
+
+x = np.arange(len(advantage_stats))
+w = 0.25
+
+plt.figure(figsize=(12,6))
+
+bars1 = plt.bar(x - w, advantage_stats["home_win_pct"], w, label="Home Win %", color="skyblue")
+bars2 = plt.bar(x,     advantage_stats["draw_pct"],     w, label="Draw %",     color="orange")
+bars3 = plt.bar(x + w, advantage_stats["away_win_pct"], w, label="Away Win %", color="seagreen")
+
+plt.xticks(x, advantage_stats["AdvantageType"])
+plt.ylabel("Percentage (%)")
+plt.title("Match Outcomes by Combined Elo and Form Advantage")
+plt.legend()
+
+for bars in [bars1, bars2, bars3]:
+    for bar in bars:
+        h = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2, h + 0.5, f"{h:.1f}", ha='center')
+
+plt.tight_layout()
+plt.show()
+
+# Q24 – Most common full-time scorelines (top 15)
+
+scoreline = df.withColumn(
+    "Scoreline",
+    F.concat(col("FTHome").cast("string"), lit("-"), col("FTAway").cast("string"))
+).groupBy("Scoreline").agg(
+    count("*").alias("count")
+).orderBy(col("count").desc()).limit(15).toPandas()
+
+print("Top 15 Most Common Scorelines")
+print(scoreline.to_string(index=False))
+
+plt.figure(figsize=(14,6))
+colors = sns.color_palette("husl", len(scoreline))
+
+bars = plt.bar(scoreline["Scoreline"], scoreline["count"], color=colors)
+
+plt.xlabel("Scoreline")
+plt.ylabel("Frequency")
+plt.title("Top 15 Most Common Full-Time Scorelines")
+plt.xticks(rotation=45, ha='right')
+
+for bar in bars:
+    h = bar.get_height()
+    plt.text(bar.get_x() + bar.get_width()/2, h + 10, f"{int(h)}", ha='center')
+
+plt.tight_layout()
+plt.show()
+
+# Q25 – Correlation matrix
+corr_cols = ["HomeElo","AwayElo","Form3Home","Form3Away","Form5Home","Form5Away",
+             "FTHome","FTAway","HomeYellow","AwayYellow","HomeRed","AwayRed"]
+
+corr_pd = df.select(corr_cols).dropna().sample(fraction=0.3, seed=42).toPandas()
+corr_matrix = corr_pd.corr()
+
+print("Feature Correlation Matrix")
+
+plt.figure(figsize=(12,10))
+
+im = plt.imshow(corr_matrix.values, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto")
+
+plt.xticks(range(len(corr_cols)), corr_cols, rotation=45, ha='right')
+plt.yticks(range(len(corr_cols)), corr_cols)
+
+for i in range(len(corr_cols)):
+    for j in range(len(corr_cols)):
+        plt.text(j, i, f"{corr_matrix.values[i,j]:.2f}", ha="center", va="center",
+                 color="black" if abs(corr_matrix.values[i,j]) > 0.5 else "white", fontsize=7)
+
+plt.colorbar(im, label="Correlation")
+
+plt.title("Feature Correlation Heatmap")
+plt.tight_layout()
+plt.show()

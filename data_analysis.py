@@ -1129,7 +1129,7 @@ plt.suptitle("Form (Last 3 Matches) vs Goals & Match Outcomes")
 plt.tight_layout()
 plt.show()
 
-Q9 – Form3 vs Form5: which is the better predictor?
+# Q9 – Form3 vs Form5: which is the better predictor?
 
 def compute_form_signal(df, home_col, away_col):
     tmp = df.withColumn("FormAdv", col(home_col) - col(away_col)) \
@@ -1234,7 +1234,7 @@ print("="*70)
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-# ── Q22 – Bookmaker calibration: implied vs actual home win probability ───────
+# ── Q11 – Bookmaker calibration: implied vs actual home win probability ───────
 odds_df = df.withColumn("ImpliedHome", lit(1.0) / col("OddHome")) \
             .withColumn("ImpliedHomeBin", F.round(col("ImpliedHome") * 10) / 10)
 
@@ -1263,7 +1263,7 @@ plt.grid(alpha=0.3)
 plt.show()
 
 
-# ── Q23 – Market accuracy by favourite type ───────────────────────────────────
+# ── Q12 – Market accuracy by favourite type ───────────────────────────────────
 seg_df = df.withColumn(
     "FavType",
     when(col("OddHome") < col("OddAway"), "Home Favourite")
@@ -1291,7 +1291,7 @@ plt.grid(axis="y", alpha=0.3)
 plt.show()
 
 
-# ── Q24 – Underdog win rate (value betting signal) ───────────────────────────
+# ── Q13 – Underdog win rate (value betting signal) ───────────────────────────
 underdog_home = df.filter(col("OddHome") > col("OddAway"))
 underdog_home_wins = underdog_home.filter(col("FTResult") == "H").count()
 underdog_home_total = underdog_home.count()
@@ -1300,7 +1300,7 @@ print(f"\nUnderdog Home Win Rate: {underdog_home_wins / underdog_home_total * 10
       f"({underdog_home_wins}/{underdog_home_total})")
 
 
-# ── Q25 – Over 2.5 goals vs Elo strength ──────────────────────────────────────
+# ── Q14 – Over 2.5 goals vs Elo strength ──────────────────────────────────────
 over_df = df.withColumn("Over25", when(col("FTHome")+col("FTAway") > 2, 1).otherwise(0)) \
             .withColumn("AvgElo", (col("HomeElo")+col("AwayElo"))/2) \
             .withColumn("EloBin", F.round(col("AvgElo")/100)*100)
@@ -1322,7 +1322,7 @@ plt.grid(alpha=0.3)
 plt.show()
 
 
-# ── Q26 – Elo vs bookmaker odds consistency ──────────────────────────────────
+# ── Q15 – Elo vs bookmaker odds consistency ──────────────────────────────────
 scatter = df.select(
     (col("HomeElo") - col("AwayElo")).alias("EloDiff"),
     "OddHome", "FTResult"

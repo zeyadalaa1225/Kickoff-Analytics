@@ -33,7 +33,16 @@ def compute_train_stats(train_df):
         median_values[c] = result[0]
 
     stats["median_values"] = median_values
-
+    all_numeric = normal_columns + numeric_cols
+    iqr_bounds = {}
+    for c in all_numeric:
+        q1, q3 = train_df.approxQuantile(c, [0.25, 0.75], 0.001)
+        iqr = q3 - q1
+        iqr_bounds[c] = {
+            "lower": q1 - 1.5 * iqr,
+            "upper": q3 + 1.5 * iqr,
+        }
+    stats["iqr_bounds"] = iqr_bounds
     total = train_df.count()
     null_count_row = train_df.select([
         count(when(isnull(c), c)).alias(c) for c in train_df.columns
@@ -142,10 +151,39 @@ def cleaning_pipeline(df, stats, label="train"):
             print(f"Filling negative {fc} values with 0 (mean was {mean_value})")
             df = df.withColumn(fc, when(col(fc) < 0, mean_value).otherwise(col(fc)))
 
-
-
     # ─────────────────────────────────────────────
-    # 10. FINAL NULL CHECK
+    # 10. OUTLIER CHECK 
+    # ─────────────────────────────────────────────
+
+    
+    # iqr_bounds = stats["iqr_bounds"]
+    # all_numeric_in_df = [
+    #     c for c in (stats["normal_columns"] + stats["numeric_cols"])
+    #     if c in df.columns
+    # ]
+ 
+    # for c in all_numeric_in_df:
+    #     if c not in iqr_bounds:
+    #         continue
+    #     lower = iqr_bounds[c]["lower"]
+    #     upper = iqr_bounds[c]["upper"]
+ 
+    #     outliers_low  = df.filter(col(c) < lower).count()
+    #     outliers_high = df.filter(col(c) > upper).count()
+ 
+    #     if outliers_low + outliers_high > 0:
+    #         print(f"  • {c}: {outliers_low} below lower fence ({lower:.4f}), "
+    #               f"{outliers_high} above upper fence ({upper:.4f}) — capped")
+    #         df = df.withColumn(
+    #             c,
+    #             when(col(c) < lower, lower)
+    #            .when(col(c) > upper, upper)
+    #            .otherwise(col(c))
+    #         )
+    #     else:
+    #         print(f"  • {c}: no outliers detected ✓")
+    # ─────────────────────────────────────────────
+    # 11. FINAL NULL CHECK
     # ─────────────────────────────────────────────
     print("\n=== Final null check ===")
     df.select([

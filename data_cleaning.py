@@ -6,9 +6,7 @@ from pyspark.sql.functions import col, when, count, isnan, isnull, mean, median
 def compute_train_stats(train_df):
     stats = {}
     normal_columns = [
-        c for c in ["HomeElo", "AwayElo",
-                     "Form3Home", "Form5Home",
-                     "Form3Away", "Form5Away"]
+        c for c in ["HomeElo", "AwayElo"]
         if c in train_df.columns
     ]
     numeric_cols = [
@@ -82,7 +80,8 @@ def cleaning_pipeline(df, stats, label="train"):
     # ─────────────────────────────────────────────
     cols_to_keep = stats["cols_to_keep"]
     df = df.select(cols_to_keep)
-    print(f"Count of removed columns with > 50% nulls: {len(df.columns) - len(cols_to_keep)}")
+    columns_dropped = len(df.columns) - len(cols_to_keep)
+    print(f"Count of removed columns with > 50% nulls: {columns_dropped}")
     # ─────────────────────────────────────────────
     # 3. DROP ROWS WHERE < 5 % NULL COLUMNS ARE NULL
     # ─────────────────────────────────────────────
@@ -183,7 +182,14 @@ def cleaning_pipeline(df, stats, label="train"):
     #     else:
     #         print(f"  • {c}: no outliers detected ✓")
     # ─────────────────────────────────────────────
-    # 11. FINAL NULL CHECK
+    # 11. CHECK FOR SAME TEAM IN HOME AND AWAY
+    # ─────────────────────────────────────────────
+    same_team_count = df.filter(col("HomeTeam") == col("AwayTeam")).count()
+    if same_team_count > 0:
+        print(f"[WARN] {same_team_count} rows have same team as Home and Away — dropping")
+        df = df.filter(col("HomeTeam") != col("AwayTeam"))
+    # ─────────────────────────────────────────────
+    # 12. FINAL NULL CHECK
     # ─────────────────────────────────────────────
     print("\n=== Final null check ===")
     df.select([

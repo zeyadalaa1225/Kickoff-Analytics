@@ -12,13 +12,10 @@ This project aims to analyze historical football match data to better understand
 Raw CSV Dataset
       │
       ▼
-┌─────────────────────────────────┐
-│   PySpark Ingestion Layer       │
-│   (SparkSession — pseudo-dist.) │
-└────────────┬────────────────────┘
-             │
-      80/20 train-test split
-      (all stats fit on TRAIN only)
+
+      │
+80/20 train-test split
+(all stats fit on TRAIN only)
              │
       ┌──────┴──────┐
       ▼             ▼
